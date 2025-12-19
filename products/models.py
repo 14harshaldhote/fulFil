@@ -75,6 +75,8 @@ class UploadJob(models.Model):
     processed_rows = models.IntegerField(default=0)
     successful_rows = models.IntegerField(default=0)
     failed_rows = models.IntegerField(default=0)
+    duplicate_rows = models.IntegerField(default=0)  # Rows that updated existing products
+    skipped_rows = models.IntegerField(default=0)    # Blank or invalid rows (not missing SKU)
     error_message = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -51,8 +51,8 @@ class UploadJobSerializer(serializers.ModelSerializer):
         model = UploadJob
         fields = [
             'id', 'filename', 'status', 'total_rows', 'processed_rows',
-            'successful_rows', 'failed_rows', 'error_message',
-            'progress_percentage', 'is_complete', 'created_at', 'updated_at'
+            'successful_rows', 'failed_rows', 'duplicate_rows', 'skipped_rows',
+            'error_message', 'progress_percentage', 'is_complete', 'created_at', 'updated_at'
         ]
         read_only_fields = fields
 

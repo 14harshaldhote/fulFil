@@ -209,22 +209,63 @@ function updateProgress(percent, message) {
 }
 
 /**
- * Show success result
+ * Show success result with detailed import summary
  */
 function showSuccess(job) {
     uploadZone.classList.remove('uploading');
     resultSection.style.display = 'block';
 
-    resultAlert.innerHTML = `
-        <div class="alert alert-success">
-            <span class="alert-icon">✅</span>
+    const totalImported = job.successful_rows + job.duplicate_rows;
+    const hasWarnings = job.failed_rows > 0 || job.skipped_rows > 0;
+
+    let summaryHtml = `
+        <div class="alert ${hasWarnings ? 'alert-warning' : 'alert-success'}">
+            <span class="alert-icon">${hasWarnings ? '⚠️' : '✅'}</span>
             <div>
-                <strong>Import Successful!</strong><br>
-                Imported ${job.successful_rows.toLocaleString()} products successfully.
-                ${job.failed_rows > 0 ? `<br>${job.failed_rows.toLocaleString()} rows failed (missing SKU).` : ''}
+                <strong>${hasWarnings ? 'Import Completed with Warnings' : 'Import Successful!'}</strong>
             </div>
         </div>
+        
+        <div class="import-summary" style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; margin-top: 1rem;">
+            <h4 style="margin: 0 0 1rem 0; font-size: 0.9rem; color: var(--text-secondary);">📊 Import Summary</h4>
+            <table style="width: 100%; font-size: 0.9rem;">
+                <tr>
+                    <td style="padding: 0.25rem 0; color: var(--text-secondary);">Total rows in file:</td>
+                    <td style="padding: 0.25rem 0; text-align: right; font-weight: 600;">${job.total_rows.toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.25rem 0; color: var(--text-secondary);">Rows processed:</td>
+                    <td style="padding: 0.25rem 0; text-align: right; font-weight: 600;">${job.processed_rows.toLocaleString()}</td>
+                </tr>
+                <tr style="border-top: 1px solid var(--border-color);">
+                    <td style="padding: 0.5rem 0 0.25rem; color: var(--success);">✓ New products imported:</td>
+                    <td style="padding: 0.5rem 0 0.25rem; text-align: right; font-weight: 600; color: var(--success);">${job.successful_rows.toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.25rem 0; color: var(--info);">↻ Duplicates overwritten:</td>
+                    <td style="padding: 0.25rem 0; text-align: right; font-weight: 600; color: var(--info);">${job.duplicate_rows.toLocaleString()}</td>
+                </tr>
+                ${job.failed_rows > 0 ? `
+                <tr>
+                    <td style="padding: 0.25rem 0; color: var(--danger);">✗ Failed (missing SKU):</td>
+                    <td style="padding: 0.25rem 0; text-align: right; font-weight: 600; color: var(--danger);">${job.failed_rows.toLocaleString()}</td>
+                </tr>
+                ` : ''}
+                ${job.skipped_rows > 0 ? `
+                <tr>
+                    <td style="padding: 0.25rem 0; color: var(--warning);">⚠ Skipped (errors):</td>
+                    <td style="padding: 0.25rem 0; text-align: right; font-weight: 600; color: var(--warning);">${job.skipped_rows.toLocaleString()}</td>
+                </tr>
+                ` : ''}
+                <tr style="border-top: 1px solid var(--border-color);">
+                    <td style="padding: 0.5rem 0 0; font-weight: 600;">Total products in DB:</td>
+                    <td style="padding: 0.5rem 0 0; text-align: right; font-weight: 700; font-size: 1.1rem;">${totalImported.toLocaleString()}</td>
+                </tr>
+            </table>
+        </div>
     `;
+
+    resultAlert.innerHTML = summaryHtml;
 }
 
 /**

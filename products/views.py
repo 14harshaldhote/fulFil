@@ -181,17 +181,33 @@ class FileUploadView(APIView):
             job.status = UploadJob.STATUS_IMPORTING
             job.save()
             
-            successful = 0
-            failed = 0
+            # Get existing SKUs to track duplicates
+            existing_skus = set(Product.objects.values_list('sku', flat=True))
+            
+            # Statistics
             processed = 0
+            new_products = 0
+            duplicates = 0
+            failed = 0
+            skipped = 0
+            
             batch = []
             skus_in_batch = set()
+            skus_in_file = set()  # Track all valid SKUs in this file
             
             for row in rows:
                 processed += 1
                 
                 try:
-                    sku = row.get('sku', '').strip().lower()
+                    # Get raw values
+                    raw_sku = row.get('sku', '')
+                    
+                    # Check for blank/empty row
+                    if not raw_sku or not raw_sku.strip():
+                        failed += 1  # Missing SKU = failed
+                        continue
+                    
+                    sku = raw_sku.strip().lower()
                     name = row.get('name', '').strip()
                     description = row.get('description', '').strip() if row.get('description') else ''
                     
@@ -206,17 +222,23 @@ class FileUploadView(APIView):
                         except (InvalidOperation, ValueError):
                             pass
                     
-                    if not sku:
-                        failed += 1
-                        continue
-                    
                     if not name:
                         name = sku
                     
-                    # Handle duplicates in batch
-                    if sku in skus_in_batch:
+                    # Check if duplicate within this file (same SKU appears multiple times)
+                    if sku in skus_in_file:
+                        # This is a duplicate within the file - count it
+                        duplicates += 1
+                        # Remove old entry from batch, add new one
                         batch = [p for p in batch if p.sku != sku]
+                    elif sku in existing_skus:
+                        # This SKU exists in DB - will be overwritten
+                        duplicates += 1
+                    else:
+                        # New product
+                        new_products += 1
                     
+                    skus_in_file.add(sku)
                     skus_in_batch.add(sku)
                     batch.append(Product(
                         sku=sku,
@@ -225,7 +247,6 @@ class FileUploadView(APIView):
                         price=price,
                         is_active=True
                     ))
-                    successful += 1
                     
                     # Process batch
                     if len(batch) >= BATCH_SIZE:
@@ -234,25 +255,29 @@ class FileUploadView(APIView):
                         skus_in_batch = set()
                         
                         job.processed_rows = processed
-                        job.successful_rows = successful
+                        job.successful_rows = new_products
+                        job.duplicate_rows = duplicates
                         job.failed_rows = failed
+                        job.skipped_rows = skipped
                         job.save()
                         
                 except Exception as e:
                     logger.error(f"Error processing row {processed}: {e}")
-                    failed += 1
+                    skipped += 1
             
             # Save remaining batch
             if batch:
                 self._save_batch(batch)
             
             job.processed_rows = processed
-            job.successful_rows = successful
+            job.successful_rows = new_products
+            job.duplicate_rows = duplicates
             job.failed_rows = failed
+            job.skipped_rows = skipped
             job.status = UploadJob.STATUS_COMPLETED
             job.save()
             
-            logger.info(f"Sync CSV processing complete: {successful} successful, {failed} failed")
+            logger.info(f"CSV import: {new_products} new, {duplicates} duplicates, {failed} failed, {skipped} skipped")
             
         except Exception as e:
             logger.exception(f"Error processing CSV: {e}")
