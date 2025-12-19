@@ -1,0 +1,21 @@
+# Django and Web Framework
+Django>=5.0,<5.2
+djangorestframework>=3.14,<4.0
+django-cors-headers>=4.0,<5.0
+django-filter>=24.0,<26.0
+
+# Database
+psycopg2-binary>=2.9,<3.0
+dj-database-url>=2.0,<3.0
+
+# Async Task Queue
+celery>=5.3,<6.0
+redis>=5.0,<6.0
+
+# Production Server
+gunicorn>=21.0,<23.0
+whitenoise>=6.6,<7.0
+
+# Utilities
+python-dotenv>=1.0,<2.0
+requests>=2.31,<3.0
