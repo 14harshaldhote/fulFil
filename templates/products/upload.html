@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Upload Products - Product Importer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Upload Products</h1>
+    <p class="page-subtitle">Import products from a CSV file with up to 500,000 records</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <!-- Upload Zone -->
+        <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">📤</div>
+            <p class="upload-text">
+                <strong>Click to upload</strong> or drag and drop
+            </p>
+            <p class="upload-hint">CSV file with columns: sku, name, description</p>
+            <input type="file" id="fileInput" accept=".csv" style="display: none;">
+        </div>
+
+        <!-- Progress Section -->
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-status">
+                <span class="progress-message" id="progressMessage">Preparing...</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="mt-4" id="progressDetails" style="display: none;">
+                <p class="text-sm text-muted">
+                    Processed: <span id="processedRows">0</span> / <span id="totalRows">0</span> rows
+                </p>
+            </div>
+        </div>
+
+        <!-- Result Section -->
+        <div id="resultSection" style="display: none;" class="mt-6">
+            <div id="resultAlert"></div>
+            <div class="mt-4 flex gap-4">
+                <button class="btn btn-primary" onclick="resetUpload()">Upload Another File</button>
+                <a href="/products/" class="btn btn-outline">View Products</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sample CSV Format -->
+<div class="card mt-6">
+    <div class="card-header">
+        <h3 class="card-title">📋 CSV Format Guide</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-4">Your CSV file should have the following columns:</p>
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Column</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>sku</code></td>
+                        <td><span class="badge badge-danger">Required</span></td>
+                        <td>Unique product identifier (case-insensitive)</td>
+                    </tr>
+                    <tr>
+                        <td><code>name</code></td>
+                        <td><span class="badge badge-warning">Optional</span></td>
+                        <td>Product name (defaults to SKU if empty)</td>
+                    </tr>
+                    <tr>
+                        <td><code>description</code></td>
+                        <td><span class="badge badge-warning">Optional</span></td>
+                        <td>Product description</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="alert alert-info mt-4">
+            <span class="alert-icon">ℹ️</span>
+            <div>
+                <strong>Note:</strong> If a product with the same SKU already exists, it will be updated with the new
+                data.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/upload.js' %}"></script>
+{% endblock %}
