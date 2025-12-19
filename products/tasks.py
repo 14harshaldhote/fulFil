@@ -5,6 +5,7 @@ Celery tasks for processing CSV uploads.
 import csv
 import logging
 import os
+from decimal import Decimal, InvalidOperation
 from celery import shared_task
 from django.db import transaction
 from django.conf import settings
@@ -72,6 +73,17 @@ def process_csv_upload(self, job_id: str, file_path: str):
                 name = row.get('name', '').strip()
                 description = row.get('description', '').strip() if row.get('description') else ''
                 
+                # Parse price (optional field)
+                price = None
+                price_str = row.get('price', '').strip()
+                if price_str:
+                    try:
+                        price = Decimal(price_str)
+                        if price < 0:
+                            price = None  # Ignore negative prices
+                    except (InvalidOperation, ValueError):
+                        pass  # Invalid price, leave as None
+                
                 if not sku:
                     failed += 1
                     continue
@@ -89,6 +101,7 @@ def process_csv_upload(self, job_id: str, file_path: str):
                     sku=sku,
                     name=name,
                     description=description,
+                    price=price,
                     is_active=True
                 ))
                 successful += 1
@@ -158,7 +171,7 @@ def _save_batch(products: list):
             products,
             update_conflicts=True,
             unique_fields=['sku'],
-            update_fields=['name', 'description', 'is_active', 'updated_at']
+            update_fields=['name', 'description', 'price', 'is_active', 'updated_at']
         )
 
 

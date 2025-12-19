@@ -1,0 +1,10 @@
+sku,name,description,price
+SKU-001,Old Product Name,Original description,100.0
+sku-001,New Product Name,Updated description,120.0
+SKU-002,Another Product,Some description,50.0
+Sku-002,Updated Another Product,New description,55.0
+SKU-003,First Version,V1 desc,10.0
+sku-003,Second Version,V2 desc,20.0
+sKu-003,Third Version (Final),V3 desc - should be this one,30.0
+SKU-004,Unique Product 1,Desc 1,40.0
+SKU-005,Unique Product 2,Desc 2,50.0

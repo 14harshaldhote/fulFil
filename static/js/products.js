@@ -79,7 +79,7 @@ function renderProducts(products) {
     if (products.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6">
+                <td colspan="7">
                     <div class="empty-state">
                         <div class="empty-state-icon">📦</div>
                         <h3 class="empty-state-title">No products found</h3>
@@ -97,6 +97,7 @@ function renderProducts(products) {
             <td><strong>${escapeHtml(product.sku)}</strong></td>
             <td>${escapeHtml(product.name)}</td>
             <td class="text-muted">${escapeHtml(product.description || '-')}</td>
+            <td class="text-muted">${product.price ? '$' + parseFloat(product.price).toFixed(2) : '-'}</td>
             <td>
                 <span class="badge ${product.is_active ? 'badge-success' : 'badge-danger'}">
                     ${product.is_active ? 'Active' : 'Inactive'}
@@ -198,6 +199,7 @@ function openProductModal() {
     document.getElementById('productSku').value = '';
     document.getElementById('productName').value = '';
     document.getElementById('productDescription').value = '';
+    document.getElementById('productPrice').value = '';
     document.getElementById('productActive').checked = true;
     document.getElementById('productSku').disabled = false;
     document.getElementById('productModal').classList.add('active');
@@ -216,6 +218,7 @@ async function editProduct(id) {
         document.getElementById('productSku').value = product.sku;
         document.getElementById('productName').value = product.name;
         document.getElementById('productDescription').value = product.description || '';
+        document.getElementById('productPrice').value = product.price || '';
         document.getElementById('productActive').checked = product.is_active;
         document.getElementById('productSku').disabled = true; // SKU can't be changed
         document.getElementById('productModal').classList.add('active');
@@ -238,10 +241,12 @@ function closeProductModal() {
  */
 async function saveProduct() {
     const id = document.getElementById('productId').value;
+    const priceValue = document.getElementById('productPrice').value.trim();
     const data = {
         sku: document.getElementById('productSku').value.trim(),
         name: document.getElementById('productName').value.trim(),
         description: document.getElementById('productDescription').value.trim(),
+        price: priceValue ? parseFloat(priceValue) : null,
         is_active: document.getElementById('productActive').checked
     };
 

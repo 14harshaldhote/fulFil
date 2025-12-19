@@ -19,6 +19,13 @@ class Product(models.Model):
     )
     name = models.CharField(max_length=255, help_text="Product name")
     description = models.TextField(blank=True, null=True, help_text="Product description")
+    price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Product price"
+    )
     is_active = models.BooleanField(default=True, help_text="Whether the product is active")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

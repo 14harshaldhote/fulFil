@@ -11,7 +11,7 @@ class ProductSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Product
-        fields = ['id', 'sku', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'sku', 'name', 'description', 'price', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate_sku(self, value):
@@ -24,7 +24,7 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Product
-        fields = ['sku', 'name', 'description', 'is_active']
+        fields = ['sku', 'name', 'description', 'price', 'is_active']
 
     def validate_sku(self, value):
         """Normalize SKU to lowercase and check for uniqueness on create."""
