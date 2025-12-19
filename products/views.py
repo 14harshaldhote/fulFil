@@ -9,6 +9,9 @@ import time
 import logging
 from django.http import StreamingHttpResponse, JsonResponse
 from django.conf import settings
+from django.views import View
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -305,14 +308,13 @@ class FileUploadView(APIView):
             )
 
 
-class UploadStatusView(APIView):
+@method_decorator(csrf_exempt, name='dispatch')
+class UploadStatusView(View):
     """
-    API view for checking upload job status.
-    Supports both regular JSON response and Server-Sent Events (SSE).
+    View for checking upload job status.
+    Uses Django View (not DRF) to support SSE without content negotiation issues.
     """
-    # Disable DRF content negotiation for this view
-    content_negotiation_class = None
-
+    
     def get(self, request, job_id):
         """Get upload job status."""
         try:
@@ -324,7 +326,7 @@ class UploadStatusView(APIView):
             )
         
         # Check if SSE is requested
-        accept_header = request.headers.get('Accept', '')
+        accept_header = request.META.get('HTTP_ACCEPT', '')
         if 'text/event-stream' in accept_header:
             return self._sse_response(job_id)
         
