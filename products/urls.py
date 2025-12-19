@@ -11,7 +11,8 @@ router.register(r'products', ProductViewSet, basename='product')
 router.register(r'upload-jobs', UploadJobViewSet, basename='upload-job')
 
 urlpatterns = [
-    path('', include(router.urls)),
+    # Custom URLs must come BEFORE router.urls
     path('products/upload/', FileUploadView.as_view(), name='product-upload'),
     path('products/upload/<uuid:job_id>/status/', UploadStatusView.as_view(), name='upload-status'),
+    path('', include(router.urls)),
 ]

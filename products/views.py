@@ -7,7 +7,7 @@ import uuid
 import json
 import time
 import logging
-from django.http import StreamingHttpResponse
+from django.http import StreamingHttpResponse, JsonResponse
 from django.conf import settings
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
@@ -24,9 +24,20 @@ from .serializers import (
     UploadJobSerializer,
     FileUploadSerializer
 )
-from .tasks import process_csv_upload, delete_all_products
 
 logger = logging.getLogger(__name__)
+
+
+# Check if Celery/Redis is available
+def is_celery_available():
+    """Check if Celery broker is accessible."""
+    try:
+        from config.celery import app
+        # Try to ping the broker
+        app.control.ping(timeout=0.5)
+        return True
+    except Exception:
+        return False
 
 
 class ProductFilter(FilterSet):
@@ -64,12 +75,22 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['delete'])
     def bulk_delete(self, request):
         """Delete all products."""
-        # Queue the deletion task
-        delete_all_products.delay()
-        return Response(
-            {'message': 'Bulk delete initiated. All products will be deleted.'},
-            status=status.HTTP_202_ACCEPTED
-        )
+        from .tasks import delete_all_products
+        
+        if is_celery_available():
+            delete_all_products.delay()
+            return Response(
+                {'message': 'Bulk delete initiated. All products will be deleted.'},
+                status=status.HTTP_202_ACCEPTED
+            )
+        else:
+            # Sync fallback
+            count = Product.objects.count()
+            Product.objects.all().delete()
+            return Response(
+                {'message': f'Deleted {count} products.'},
+                status=status.HTTP_200_OK
+            )
     
     @action(detail=False, methods=['get'])
     def stats(self, request):
@@ -117,13 +138,146 @@ class FileUploadView(APIView):
             status=UploadJob.STATUS_PENDING
         )
         
-        # Queue the processing task
-        process_csv_upload.delay(str(job.id), file_path)
+        # Try async first, fallback to sync
+        if is_celery_available():
+            from .tasks import process_csv_upload
+            process_csv_upload.delay(str(job.id), file_path)
+            logger.info(f"Queued async CSV processing for job {job.id}")
+        else:
+            # Process synchronously if Celery not available
+            logger.warning("Celery not available, processing CSV synchronously")
+            self._process_sync(job, file_path)
         
         return Response(
             UploadJobSerializer(job).data,
             status=status.HTTP_202_ACCEPTED
         )
+    
+    def _process_sync(self, job, file_path):
+        """Process CSV synchronously when Celery is not available."""
+        import csv
+        from decimal import Decimal, InvalidOperation
+        from django.db import transaction
+        
+        BATCH_SIZE = 5000
+        
+        try:
+            job.status = UploadJob.STATUS_PARSING
+            job.save()
+            
+            # Read CSV
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                job.total_rows = len(rows)
+                job.save()
+            
+            if job.total_rows == 0:
+                job.status = UploadJob.STATUS_COMPLETED
+                job.error_message = "CSV file is empty."
+                job.save()
+                return
+            
+            job.status = UploadJob.STATUS_IMPORTING
+            job.save()
+            
+            successful = 0
+            failed = 0
+            processed = 0
+            batch = []
+            skus_in_batch = set()
+            
+            for row in rows:
+                processed += 1
+                
+                try:
+                    sku = row.get('sku', '').strip().lower()
+                    name = row.get('name', '').strip()
+                    description = row.get('description', '').strip() if row.get('description') else ''
+                    
+                    # Parse price
+                    price = None
+                    price_str = row.get('price', '').strip()
+                    if price_str:
+                        try:
+                            price = Decimal(price_str)
+                            if price < 0:
+                                price = None
+                        except (InvalidOperation, ValueError):
+                            pass
+                    
+                    if not sku:
+                        failed += 1
+                        continue
+                    
+                    if not name:
+                        name = sku
+                    
+                    # Handle duplicates in batch
+                    if sku in skus_in_batch:
+                        batch = [p for p in batch if p.sku != sku]
+                    
+                    skus_in_batch.add(sku)
+                    batch.append(Product(
+                        sku=sku,
+                        name=name,
+                        description=description,
+                        price=price,
+                        is_active=True
+                    ))
+                    successful += 1
+                    
+                    # Process batch
+                    if len(batch) >= BATCH_SIZE:
+                        self._save_batch(batch)
+                        batch = []
+                        skus_in_batch = set()
+                        
+                        job.processed_rows = processed
+                        job.successful_rows = successful
+                        job.failed_rows = failed
+                        job.save()
+                        
+                except Exception as e:
+                    logger.error(f"Error processing row {processed}: {e}")
+                    failed += 1
+            
+            # Save remaining batch
+            if batch:
+                self._save_batch(batch)
+            
+            job.processed_rows = processed
+            job.successful_rows = successful
+            job.failed_rows = failed
+            job.status = UploadJob.STATUS_COMPLETED
+            job.save()
+            
+            logger.info(f"Sync CSV processing complete: {successful} successful, {failed} failed")
+            
+        except Exception as e:
+            logger.exception(f"Error processing CSV: {e}")
+            job.status = UploadJob.STATUS_FAILED
+            job.error_message = str(e)
+            job.save()
+        finally:
+            # Cleanup file
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception:
+                pass
+    
+    def _save_batch(self, products):
+        """Save batch using bulk_create with upsert."""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            Product.objects.bulk_create(
+                products,
+                update_conflicts=True,
+                unique_fields=['sku'],
+                update_fields=['name', 'description', 'price', 'is_active', 'updated_at']
+            )
 
 
 class UploadStatusView(APIView):
@@ -131,22 +285,27 @@ class UploadStatusView(APIView):
     API view for checking upload job status.
     Supports both regular JSON response and Server-Sent Events (SSE).
     """
+    # Disable DRF content negotiation for this view
+    content_negotiation_class = None
 
     def get(self, request, job_id):
         """Get upload job status."""
         try:
             job = UploadJob.objects.get(id=job_id)
         except UploadJob.DoesNotExist:
-            return Response(
+            return JsonResponse(
                 {'error': 'Upload job not found'},
-                status=status.HTTP_404_NOT_FOUND
+                status=404
             )
         
         # Check if SSE is requested
-        if request.headers.get('Accept') == 'text/event-stream':
+        accept_header = request.headers.get('Accept', '')
+        if 'text/event-stream' in accept_header:
             return self._sse_response(job_id)
         
-        return Response(UploadJobSerializer(job).data)
+        # Return JSON response
+        data = UploadJobSerializer(job).data
+        return JsonResponse(data)
 
     def _sse_response(self, job_id):
         """Generate SSE stream for upload progress."""
@@ -160,7 +319,7 @@ class UploadStatusView(APIView):
                     if job.is_complete:
                         break
                     
-                    time.sleep(0.5)  # Poll every 500ms
+                    time.sleep(0.5)
                 except UploadJob.DoesNotExist:
                     yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
                     break
